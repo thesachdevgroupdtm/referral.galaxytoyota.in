@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id                String    @id @default(cuid())
+  name              String?
+  email             String    @unique
+  emailVerified     DateTime?
+  image             String?
+  phone             String?
+  phoneVerified     Boolean   @default(false)
+  password          String?
+  role              Role      @default(USER)
+  referralCode      String    @unique
+  referredBy        String?
+  totalEarnings     Float     @default(0)
+  availableBalance  Float     @default(0)
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  accounts          Account[]
+  sessions          Session[]
+  referrals         Referral[] @relation("ReferrerReferrals")
+  referredReferrals Referral[] @relation("RefereeReferrals")
+  otpVerifications  OtpVerification[]
+  notifications     Notification[]
+  rewards           Reward[]
+  leadSubmissions   Lead[]
+
+  @@map("users")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Car {
+  id          String     @id @default(cuid())
+  name        String
+  model       String
+  year        Int
+  price       Float
+  image       String?
+  description String?    @db.Text
+  features    Json?
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  referrals   Referral[]
+  leads       Lead[]
+
+  @@map("cars")
+}
+
+model Referral {
+  id            String         @id @default(cuid())
+  referrerId    String
+  refereeId     String?
+  refereeName   String
+  refereeEmail  String
+  refereePhone  String
+  carId         String?
+  status        ReferralStatus @default(PENDING)
+  rewardAmount  Float          @default(0)
+  notes         String?        @db.Text
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  referrer      User  @relation("ReferrerReferrals", fields: [referrerId], references: [id])
+  referee       User? @relation("RefereeReferrals", fields: [refereeId], references: [id])
+  car           Car?  @relation(fields: [carId], references: [id])
+
+  @@map("referrals")
+}
+
+model Lead {
+  id           String     @id @default(cuid())
+  name         String
+  email        String
+  phone        String
+  carId        String?
+  message      String?    @db.Text
+  source       String?    // referral, website, etc.
+  referralCode String?
+  status       LeadStatus @default(NEW)
+  assignedTo   String?
+  notes        String?    @db.Text
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  car          Car?  @relation(fields: [carId], references: [id])
+  submittedBy  User? @relation(fields: [referralCode], references: [referralCode])
+
+  @@map("leads")
+}
+
+model OtpVerification {
+  id        String      @id @default(cuid())
+  userId    String
+  type      OtpType
+  code      String
+  verified  Boolean     @default(false)
+  expiresAt DateTime
+  createdAt DateTime    @default(now())
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("otp_verifications")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String   @db.Text
+  type      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Reward {
+  id          String     @id @default(cuid())
+  userId      String
+  amount      Float
+  type        RewardType
+  description String
+  referralId  String?
+  status      String     @default("PENDING")
+  createdAt   DateTime   @default(now())
+
+  user        User @relation(fields: [userId], references: [id])
+
+  @@map("rewards")
+}
+
+model Settings {
+  id                    String  @id @default(cuid())
+  referralRewardAmount  Float   @default(10000)
+  refereeDiscountAmount Float   @default(5000)
+  minWithdrawalAmount   Float   @default(1000)
+  maxReferralsPerDay    Int     @default(10)
+  otpExpiryMinutes      Int     @default(10)
+  isMaintenanceMode     Boolean @default(false)
+  updatedAt             DateTime @updatedAt
+
+  @@map("settings")
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPERADMIN
+}
+
+enum ReferralStatus {
+  PENDING
+  CONTACTED
+  INTERESTED
+  VISIT_SCHEDULED
+  VISITED
+  NEGOTIATING
+  COMPLETED
+  CANCELLED
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  LOST
+}
+
+enum OtpType {
+  PHONE
+  EMAIL
+  REFERRAL
+}
+
+enum RewardType {
+  REFERRAL_BONUS
+  SIGNUP_BONUS
+  MILESTONE_BONUS
+}
